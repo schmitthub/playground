@@ -851,28 +851,13 @@ func (s *State) SearchTweets(ctx context.Context, query string, limit int, since
 			continue
 		}
 		
-		// Simple text matching - if query is empty, return all tweets (up to limit)
-		// Otherwise, match if query appears in tweet text OR author name/username (case-insensitive)
+		// Use RuleMatcher for full query operator support (from:, lang:, OR, AND, negation, etc.)
 		matches := false
 		if query == "" {
 			matches = true
 		} else {
-			queryLower := strings.ToLower(query)
-			// Check tweet text first
-			if strings.Contains(strings.ToLower(tweet.Text), queryLower) {
-				matches = true
-			}
-			
-			// Also check author name and username (OR condition - matches if text OR author matches)
-			if !matches {
-				author := s.users[tweet.AuthorID]
-				if author != nil {
-					if strings.Contains(strings.ToLower(author.Name), queryLower) ||
-						strings.Contains(strings.ToLower(author.Username), queryLower) {
-						matches = true
-					}
-				}
-			}
+			rm := &RuleMatcher{}
+			matches = rm.MatchRule(tweet, query, s)
 		}
 		
 		if matches {

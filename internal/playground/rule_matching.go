@@ -1045,8 +1045,9 @@ func splitOnOperator(s, operator string) []string {
 			substr := sUpper[i : i+len(operator)]
 			if substr == operatorUpper {
 				// Check if it's actually the operator (surrounded by spaces or at boundaries)
-				beforeOK := i == 0 || s[i-1] == ' '
-				afterOK := i+len(operator) >= len(s) || s[i+len(operator)] == ' '
+				// If operator already starts/ends with space, the boundary is inherently satisfied
+				beforeOK := i == 0 || s[i-1] == ' ' || operator[0] == ' '
+				afterOK := i+len(operator) >= len(s) || s[i+len(operator)] == ' ' || operator[len(operator)-1] == ' '
 
 				if beforeOK && afterOK {
 					parts = append(parts, current.String())
