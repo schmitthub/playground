@@ -393,27 +393,9 @@ func (sc *SeedingConfig) GetDMConversationsSeeding() (min, max int) {
 // GetRelationshipSeeding returns relationship seeding config with defaults
 func (sc *SeedingConfig) GetRelationshipSeeding() *RelationshipSeedingConfig {
 	if sc.Relationships != nil {
-		cfg := sc.Relationships
-		// Apply defaults for unset values
-		if cfg.FollowsPerUserMin == 0 {
-			cfg.FollowsPerUserMin = 5
-		}
-		if cfg.FollowsPerUserMax == 0 {
-			cfg.FollowsPerUserMax = 25
-		}
-		if cfg.LikesPerPostMin == 0 {
-			cfg.LikesPerPostMin = 2
-		}
-		if cfg.LikesPerPostMax == 0 {
-			cfg.LikesPerPostMax = 100
-		}
-		if cfg.RetweetsPerPostMin == 0 {
-			cfg.RetweetsPerPostMin = 1
-		}
-		if cfg.RetweetsPerPostMax == 0 {
-			cfg.RetweetsPerPostMax = 50
-		}
-		return cfg
+		// When relationships config is explicitly provided, use it as-is.
+		// Zero values are intentional (e.g. retweets_per_post_max=0 disables retweets).
+		return sc.Relationships
 	}
 	return &RelationshipSeedingConfig{
 		FollowsPerUserMin: 5,

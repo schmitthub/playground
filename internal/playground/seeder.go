@@ -397,7 +397,7 @@ func (s *Seeder) seedTweets() {
 		tweetTexts = s.config.GetTweetTexts()
 	}
 
-	baseTime := time.Now().AddDate(0, -3, 0) // 3 months ago
+	baseTime := time.Now().AddDate(0, 0, -7) // 7 days ago
 	tweetIdx := 0
 
 	// Get post seeding config
@@ -1860,6 +1860,12 @@ func (s *Seeder) createRetweetTweet(retweeter *User, originalTweet *Tweet) *Twee
 // seedPlaygroundUserRetweets creates retweet tweet objects for the playground user's posts
 func (s *Seeder) seedPlaygroundUserRetweets() {
 	if s.playgroundUser == nil || len(s.users) < 2 {
+		return
+	}
+
+	// Respect config: skip if retweets are disabled
+	relConfig := s.seedingConfig.GetRelationshipSeeding()
+	if relConfig.RetweetsPerPostMax == 0 {
 		return
 	}
 	
