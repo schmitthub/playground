@@ -120,70 +120,81 @@ func (rm *RuleMatcher) MatchRule(tweet *Tweet, ruleValue string, state *State) b
 
 // matchComplexRule handles rules with parentheses
 func (rm *RuleMatcher) matchComplexRule(tweet *Tweet, ruleValue string, state *State) bool {
-	// Simple approach: evaluate innermost parentheses first
-	// Find innermost parentheses
+	// Evaluate innermost parentheses first, replacing each group with a sentinel.
+	// Sentinels (__TRUE__, __FALSE__) are chosen to avoid colliding with tweet
+	// text or query operators, preventing infinite recursion when the result is
+	// fed back into MatchRule.
 	re := regexp.MustCompile(`\(([^()]+)\)`)
 	for {
 		match := re.FindStringSubmatch(ruleValue)
 		if match == nil {
 			break
 		}
-		// Evaluate the inner expression
 		innerResult := rm.MatchRule(tweet, match[1], state)
-		// Replace with result
-		replacement := "TRUE"
-		if !innerResult {
-			replacement = "FALSE"
+		sentinel := "__FALSE__"
+		if innerResult {
+			sentinel = "__TRUE__"
 		}
-		ruleValue = strings.Replace(ruleValue, match[0], replacement, 1)
+		ruleValue = strings.Replace(ruleValue, match[0], sentinel, 1)
 	}
 
-	// Now evaluate the remaining expression, treating TRUE/FALSE as keywords
-	ruleValue = strings.ReplaceAll(ruleValue, "TRUE", "true")
-	ruleValue = strings.ReplaceAll(ruleValue, "FALSE", "false")
+	// evaluatePart resolves a single term: sentinels become booleans,
+	// everything else is evaluated via MatchRule.
+	evaluatePart := func(part string) bool {
+		part = strings.TrimSpace(part)
+		switch part {
+		case "__TRUE__":
+			return true
+		case "__FALSE__":
+			return false
+		default:
+			return rm.MatchRule(tweet, part, state)
+		}
+	}
 
-	// Handle boolean operators with TRUE/FALSE
+	// Handle explicit OR
 	if strings.Contains(strings.ToUpper(ruleValue), " OR ") {
 		parts := splitOnOperator(ruleValue, " OR ")
 		for _, part := range parts {
-			part = strings.TrimSpace(part)
-			if part == "true" || part == "TRUE" {
-				return true
-			}
-			if part == "false" || part == "FALSE" {
-				continue
-			}
-			if rm.MatchRule(tweet, part, state) {
+			if evaluatePart(part) {
 				return true
 			}
 		}
 		return false
 	}
 
+	// Handle explicit AND
 	if strings.Contains(strings.ToUpper(ruleValue), " AND ") {
 		parts := splitOnOperator(ruleValue, " AND ")
 		for _, part := range parts {
-			part = strings.TrimSpace(part)
-			if part == "false" || part == "FALSE" {
+			if !evaluatePart(part) {
 				return false
-			}
-			if part != "true" && part != "TRUE" {
-				if !rm.MatchRule(tweet, part, state) {
-					return false
-				}
 			}
 		}
 		return true
 	}
 
-	// Single value
-	if ruleValue == "true" || ruleValue == "TRUE" {
-		return true
+	// Handle implicit AND (space-separated terms).
+	// This must be done here rather than delegating to MatchRule, because
+	// MatchRule doesn't know about sentinels and would treat them as keywords.
+	parts := splitOnSpacesRespectingQuotes(ruleValue)
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		// Negation: -operator means "must NOT match"
+		if strings.HasPrefix(part, "-") {
+			if evaluatePart(part[1:]) {
+				return false
+			}
+			continue
+		}
+		if !evaluatePart(part) {
+			return false
+		}
 	}
-	if ruleValue == "false" || ruleValue == "FALSE" {
-		return false
-	}
-	return rm.MatchRule(tweet, ruleValue, state)
+	return true
 }
 
 // tokenizeText tokenizes text by splitting on punctuation, symbols, and Unicode separators
@@ -1044,8 +1055,9 @@ func splitOnOperator(s, operator string) []string {
 		if !inQuotes && i+len(operator) <= len(s) {
 			substr := sUpper[i : i+len(operator)]
 			if substr == operatorUpper {
-				// Check if it's actually the operator (surrounded by spaces or at boundaries)
-				// If operator already starts/ends with space, the boundary is inherently satisfied
+				// Check if it's actually the operator (surrounded by spaces or at boundaries).
+				// When the operator already starts/ends with a space (e.g. " OR "),
+				// that space serves as its own boundary delimiter.
 				beforeOK := i == 0 || s[i-1] == ' ' || operator[0] == ' '
 				afterOK := i+len(operator) >= len(s) || s[i+len(operator)] == ' ' || operator[len(operator)-1] == ' '
 
